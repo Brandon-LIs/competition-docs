@@ -1,0 +1,441 @@
+# 完整项目案例剖析 · M10源码逐行详解
+
+> 每一个案例都附完整源码逐行分析，理解每一行代码的作用和设计思路
+
+---
+
+## 案例一：AI守护+ — 行空板M10端源码逐行详解
+
+> 高中组第三组国赛作品 · 378行Python · Arduino+M10双板协作
+
+📂 [行空板终稿.py 源文件](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/高中组第三组文件材料/04-7-18-16-54行空板终稿.py) | [Arduino程序.txt](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/高中组第三组文件材料/05arduino程序.txt) | [创作说明.docx](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/高中组第三组文件材料/01AI守护+创作说明.docx)
+
+![项目1](file:///Users/liboning/Desktop/科创比赛相关/1/图片1.png) ![项目2](file:///Users/liboning/Desktop/科创比赛相关/1/图片2.png)
+
+### 源码结构总览
+
+```
+行空板终稿.py (378行)
+├── 1-27行  ：导入库 + 初始化
+├── 29-42行 ：B键录音回调函数
+├── 45-52行 ：GUI初始化 + 启动画面
+├── 56-58行 ：MQTT连接回调
+├── 60-328行：MQTT消息处理主逻辑（核心！）
+│   ├── "paizhao" → 拍照上传 (行65-130)
+│   ├── "huozai"   → 火灾报警 (行131-210)
+│   ├── "luying"   → 录音上传 (行214-238)
+│   ├── "kaiqi"    → 开启自动监控 (行239-290)
+│   ├── "guanbi"   → 关闭监控 (行292-304)
+│   └── else       → 接收音频播放 (行319-328)
+├── 330-335行：MQTT客户端配置
+├── 338-347行：板载按钮逻辑（被注释的旧代码）
+└── 349-378行：loop_forever + 被注释的多线程
+```
+
+### 逐行详解
+
+#### 第1-27行：导入库 + 初始化
+
+```python
+from unihiker import Audio      # 用于录音、播放、音量检测
+from unihiker import GUI        # 用于屏幕显示文字/图片
+import cv2                      # OpenCV，用于摄像头拍照
+import base64                   # 将图片/音频二进制编码为文本（MQTT只能传文本）
+import json                     # JSON序列化/反序列化，MQTT消息格式
+import paho.mqtt.client as mqtt # MQTT通信核心库
+from pinpong.extension.unihiker import *  # 板载元件：光线、蜂鸣器、按键、加速度
+from pinpong.board import Board, Pin     # 引脚控制
+import datetime                 # 获取当前时间，用于定时拍照
+import siot                     # 简化版MQTT（本项目未实际使用）
+
+Board().begin()    # ⚠ 必须调用！初始化协处理器
+```
+
+#### 第29-42行：B键回调 — 按B键录音并上传
+
+```python
+def on_buttonb_click_callback():
+    u_audio.record("record.wav", 3)      # 录3秒WAV
+    with open("record.wav", 'rb') as f:
+        byte_content = f.read()
+    if byte_content:
+        base64_bytes = base64.b64encode(byte_content)  # 二进制→文本
+        base64_string = base64_bytes.decode('utf8')
+        result = json.dumps({"params": base64_string})
+        client.publish('aaa/c', result)   # 通过MQTT发给手机
+```
+
+**设计要点**：为什么用Base64？MQTT只能传输文本，WAV是二进制文件，Base64把二进制编码为ASCII字符才能Publish。
+
+#### 第45-52行：GUI初始化
+
+```python
+u_gui = GUI()
+u_audio = Audio()
+
+tu = u_gui.draw_image(image="1.png", x=20, y=140)  # 显示背景图
+tu.config(w=200)                                     # 图片宽度200px
+u_gui.draw_text(text="       AI守护 +", x=1, y=5, font_size=20, color="#0000FF")
+```
+
+#### 第56-58行：MQTT连接回调
+
+```python
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code" + str(rc))
+    client.subscribe("aaa/b")    # 订阅控制指令频道
+```
+
+**关键**：`subscribe("aaa/b")` 只有订阅了某个Topic，才能收到该Topic的消息。
+
+#### 第60-328行：核心 — MQTT消息处理
+
+这是整个程序最核心的函数，处理从MQTT接收的所有指令：
+
+```python
+def on_message(client, userdata, msg):
+    dictxzy = json.loads(str(msg.payload, encoding="utf8"))
+    cmd = dictxzy['params']
+```
+
+**为什么用 `json.loads()`？**
+- Arduino发送 `{"params":"paizhao"}` 是JSON字符串
+- 必须解析为Python字典才能用 `dictxzy['params']` 取值
+
+##### 拍照指令 (行65-130)
+
+```python
+if cmd == 'paizhao':
+    # === 第一步：清屏 ===
+    # 用白色文字覆盖旧状态（相当于擦除）
+    u_gui.draw_text(text="拍照", color="#FFFFFF")
+    u_gui.draw_text(text="火灾警告", color="#FFFFFF")
+    u_gui.draw_text(text="录音", color="#FFFFFF")
+    # 行空板没有clear_area函数，所以用白色文字"覆盖"旧文字来清屏
+
+    # === 第二步：拍照 ===
+    u_gui.draw_text(text="拍照", color="#0000FF")  # 蓝色=正在执行
+    vd = cv2.VideoCapture()
+    vd.open(0)                # 0=第一个USB摄像头
+    while not vd.isOpened():  # 忙等待，直到摄像头就绪
+        pass
+    ret, grab = vd.read()     # 拍照
+    cv2.imwrite("Mind+.png", grab)  # 保存
+    vd.release()              # 释放摄像头（其他程序才能用）
+
+    # === 第三步：屏幕显示 ===
+    tu.config(image="Mind+.png")  # tu是最初创建的image对象，更换图片源
+
+    # === 第四步：Base64编码 ===
+    with open("Mind+.png", 'rb') as f:
+        byte_content = f.read()
+    base64_string = base64.b64encode(byte_content).decode('utf8')
+
+    # === 第五步：MQTT发送给手机 ===
+    client.publish('aaa/c', json.dumps({"params": base64_string}))
+
+    # === 第六步：百度AI识别（比赛现场不可用） ===
+    try:
+        response = requests.post(BAIDU_URL, data={"image": img_b64}, ...)
+        jjstr = response.json()
+        for i in range(jjstr['result_num']):
+            if "火" in jjstr['result'][i]['keyword']:
+                print(f"检测到火焰! 置信度: {jjstr['result'][i]['score']}")
+    except:
+        print('上传百度失败')
+```
+
+**核心技巧分析**：
+
+1. **白色覆盖清屏法**：行空板M10的GUI没有局部清除功能，所以用与背景同色的文字"覆盖"旧文字来清屏。这是实战中的常用技巧。
+
+2. **忙等待** (`while not vd.isOpened(): pass`)：摄像头初始化需要时间，这个循环确保摄像头就绪后才拍照。如果用 `time.sleep(1)` 可能不够（USB设备初始化时间不确定），忙等待更可靠。
+
+3. **Base64编码**：这是本项目最核心的技术难点。MQTT是文本协议，不能直接传二进制图片。Base64将图片的每一个字节映射为一个ASCII字符，实现二进制在文本通道中的传输。
+
+4. **异常处理** (`try/except`)：百度AI识别需要联网，比赛现场不可用。用try/except包裹，失败时不会导致整个程序崩溃，而是静默跳过。
+
+##### 火灾报警指令 (行131-210)
+
+```python
+elif cmd == 'huozai':
+    buzzer.play(buzzer.DADADADUM, buzzer.OnceInBackground)
+    # OnceInBackground = 后台播放，不阻塞后续代码执行
+
+    # 红色显示火灾警告
+    u_gui.draw_text(text="       火灾警告", color="#FF0000")
+
+    # 自动拍照并上传（与拍照指令相同的逻辑）
+    # ...拍照+Base64+MQTT...
+    # ...百度AI识别火焰...
+```
+
+##### 录音指令 (行214-238)
+
+```python
+elif cmd == 'luying':
+    u_audio.record("record.wav", 5)     # 录5秒
+    # Base64编码 → MQTT上传 → 手机端解码播放
+```
+
+##### 自动监控开关 (行239-304)
+
+```python
+elif cmd == 'kaiqi':    # 开启自动监控
+    paizhaosign = 1
+    while paizhaosign == 1:
+        # 每20秒自动拍一张
+        miao = datetime.datetime.now().second
+        if miao in (0, 20, 40):
+            # 拍照 → Base64 → MQTT上传
+            vd = cv2.VideoCapture(); vd.open(0)
+            grab = vd.read()[1]
+            cv2.imwrite("Mind+.png", grab)
+            # ...编码上传...
+```
+
+**注意**：这段代码有个bug——`while paizhaosign==1` 在主线程中运行，会阻塞MQTT消息接收。正确的做法应该用**独立线程**运行定时拍照逻辑。
+
+##### 默认：接收音频播放 (行319-328)
+
+```python
+else:
+    # 如果指令不是以上任何一种 → 尝试当作Base64音频解码
+    imgdata = base64.b64decode(dictxzy['params'])
+    with open('6.wav', 'wb') as f:
+        f.write(imgdata)
+    os.system("mplayer 6.wav")    # 系统命令播放音频
+```
+
+#### 第330-335行：MQTT配置
+
+```python
+u_gui.on_b_click(on_buttonb_click_callback)  # B键→录音
+
+client = mqtt.Client("12345")
+client.username_pw_set("siot", "dfrobot")
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect("192.168.173.167", 1883, 60)   # 连接SIoT
+```
+
+#### 第349行：启动MQTT消息循环
+
+```python
+client.loop_forever()   # 阻塞！程序在此死循环等待MQTT消息
+```
+
+**这就是为什么需要多线程**：`loop_forever()` 永远不会返回，如果后面还有传感器采集代码，就永远执行不到。正确的做法：
+
+```python
+threading.Thread(target=client.loop_forever).start()  # MQTT线程
+threading.Thread(target=sensor_loop).start()           # 传感器线程
+```
+
+---
+
+## 案例二：智慧教室 — 行空板M10端源码详解
+
+> 551行Python · 单板方案 · 多页面UI · DeepSeek AI集成
+
+📂 [777-1.py 源文件](file:///Users/liboning/Desktop/科创比赛相关/智慧教室-smartclassroom/777-1.py) | [liaotian.py](file:///Users/liboning/Desktop/科创比赛相关/智慧教室-smartclassroom/liaotian.py) | [ost-fast.py](file:///Users/liboning/Desktop/科创比赛相关/智慧教室-smartclassroom/ost-fast.py)
+
+### 与AI守护+的对比
+
+| 维度 | AI守护+ | 智慧教室 |
+|------|---------|----------|
+| 架构 | 双板(Arduino+M10) | 单板(M10) |
+| UI | 单页覆盖刷新 | 多页面(A/B翻页) |
+| 代码组织 | 一切在on_message里 | 模块化函数 |
+| IP获取 | 硬编码 | 自动获取 |
+| AI | 百度云(需网络) | DeepSeek API |
+| 代码风格 | 学生作品(直白) | 较工程化(结构清晰) |
+
+### 核心亮点逐行分析
+
+#### 亮点1：自动获取本机IP
+
+```python
+def get_unihiker_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))    # 不用真的连上，只是获取本机出口IP
+        ip = s.getsockname()[0]         # 本机局域网IP
+        return ip
+    finally:
+        s.close()
+```
+
+**为什么这比硬编码好？**
+- 不同路由器分配的IP不同（可能是192.168.1.x或192.168.0.x）
+- 自动获取意味着代码在任何网络环境都直接可用
+
+#### 亮点2：多页面翻页机制
+
+```python
+PAGES = ["home", "daily", "ai", "control"]
+
+def on_a():
+    i = PAGES.index(current_page)
+    show_page(PAGES[(i - 1) % len(PAGES)])  # 上一页，循环
+
+def on_b():
+    i = PAGES.index(current_page)
+    show_page(PAGES[(i + 1) % len(PAGES)])  # 下一页，循环
+
+u_gui.on_a_click(on_a)
+u_gui.on_b_click(on_b)
+```
+
+**`(i - 1) % len(PAGES)` 是什么？**
+- 取模运算实现循环翻页
+- 在"home"按A → `(0-1) % 4 = 3` → 跳到"control"（最后一页）
+
+#### 亮点3：color scheme模式
+
+```python
+BG     = "#0f1830"   # 深蓝背景
+CARD   = "#1b2a47"   # 卡片色
+TITLE  = "#ffffff"   # 标题
+TEXT   = "#bcd4ff"   # 正文
+ACCENT = "#00e5ff"   # 强调
+WARN   = "#ffd166"   # 警告
+```
+
+**把颜色定义为常量**的好处：要改整套UI风格只需改这几行，不用到处找颜色代码。
+
+#### 亮点4：正确的多线程模式
+
+```python
+def task1():
+    client.loop_forever()   # MQTT线程
+
+def task2():
+    while True:
+        if paizhaosign:
+            paizao_shot()
+            up_siot('Mind+.png')
+            update_home_sensors()
+        time.sleep(5)
+
+th1 = threading.Thread(target=task1); th1.start()
+th2 = threading.Thread(target=task2); th2.start()
+```
+
+**对比AI守护+**：AI守护+把 `loop_forever()` 写在主线程，导致定时拍照的while循环无法执行。智慧教室正确地分离了MQTT循环和传感器循环。
+
+#### 亮点5：MQTT消息路由优化
+
+```python
+def on_message(client, userdata, msg):
+    # 先判断topic
+    if msg.topic == "aaa/daily":
+        handle_daily_msg(msg.payload)   # 资讯频道
+        return
+    # 再解析JSON判断指令类型
+    cmd = json.loads(msg.payload).get('params', '')
+    if cmd[0:5] == 'video':
+        baidu_ai_up(cmd[5:])    # AI识别
+    elif cmd[0:5] == 'voise':
+        text_to_speech(cmd[5:]) # 语音播报
+    # ...
+```
+
+**比AI守护+的改进**：不用把所有逻辑塞在一个if-elif链里，而是用topic和cmd前缀做两级路由。
+
+#### 亮点6：DeepSeek AI集成
+
+```python
+def ask_deepseek(question):
+    resp = requests.post(
+        "https://api.deepseek.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {KEY}"},
+        json={
+            "model": "deepseek-v4-flash",
+            "messages": [
+                {"role": "system", "content": "你是智慧教室AI助手"},
+                {"role": "user", "content": question}
+            ]
+        },
+        timeout=20
+    )
+    return resp.json()["choices"][0]["message"]["content"]
+```
+
+**API调用要点**：
+- `system` role：设定AI的身份（教师助手）
+- `timeout=20`：防止网络卡顿导致永久阻塞
+- 返回的 `content` 就是AI的回复文本
+
+---
+
+## 案例三：语音聊天机器人 — K10端源码逐行
+
+📂 [Voice chat robot-K10.py](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/投稿DF社区/项目代码/Voice%20chat%20robot-K10.py) | [PC端代码](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/投稿DF社区/项目代码/Voice%20chat%20robot-PC.py)
+
+![截图1](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/投稿DF社区/微信截图_20250218172842.png)
+![截图2](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/投稿DF社区/微信截图_20250218172910.png)
+
+### 核心流程
+
+```
+按下A键 → 录音3秒WAV → Base64编码 → MQTT发布到 topic/K2PQUEWAV
+                                                    ↓
+                                               PC端监听
+                                               ├─ 收到WAV
+                                               ├─ 语音识别(WAV→文字)
+                                               ├─ 发AI大模型(文字→回复文字)
+                                               ├─ TTS(回复文字→回复WAV)
+                                               └─ MQTT发布回复到 topic/P2KANWWAV
+                                                    ↓
+K10收到 → Base64解码 → 保存answer.wav → speaker播放
+```
+
+### K10端核心代码
+
+```python
+# 录音并Base64编码发送
+def button_a_pressed():
+    mic.recode_sys(name="quesion.wav", time=3)  # K10板载录音
+    mqttclient.publish(topic='siot/K2PQUEWAV', 
+                       content='->' + base_64_send())
+
+# Base64编码函数
+def base_64_send():
+    with open("quesion.wav", 'rb') as f:
+        byte_content = f.read()
+    return binascii.b2a_base64(byte_content, newline=False).decode('utf8')
+
+# 接收PC回复的语音
+def received_P2KANWWAV():
+    msg = mqttclient.message(topic='siot/P2KANWWAV')
+    decoded = binascii.a2b_base64(msg.encode('ascii'))  # Base64解码
+    with open("answer.wav", 'w') as f:
+        f.write(decoded)
+    speaker.play_sys_music("answer.wav")  # 播放！
+```
+
+**为什么K10和PC端要分不同Topic？**
+```
+topic/K2PQUEWAV   → K to PC: Question WAV（问题音频）
+topic/P2KQUETEXT  → PC to K: Question TEXT（识别后的文字）
+topic/P2KANWTEXT  → PC to K: Answer TEXT（AI回复文字）
+topic/P2KANWWAV   → PC to K: Answer WAV（AI回复音频）
+```
+四个Topic各司其职，数据流清晰不串扰。
+
+---
+
+## 📸 国赛现场
+
+![现场全景](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/通识性培训_项目设计备忘/6_0诸暨创意智造国赛现场.jpg)
+
+![器材领取处](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/通识性培训_项目设计备忘/6_1-1诸暨创意智造国赛现场(作品及使用的开源器材领取处)照片.jpg)
+
+![答辩现场](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/通识性培训_项目设计备忘/6_4-1诸暨创意智造国赛现场(答辩)照片.jpg)
+
+![高中组作品参考](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/通识性培训_项目设计备忘/6_5-3诸暨创意智造国赛现场(2025高中组作品问题)照片.jpg)
+
+---
+
+*全部代码均来自你的培训资料，比赛现场可直接打开源文件查看完整代码*

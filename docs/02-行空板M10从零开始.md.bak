@@ -1,0 +1,467 @@
+# 行空板M10 从零开始 · 全指南
+
+> 适用比赛：全国青少年实践活动创意智造活动（高中组）
+> 编程环境：**Mind+**（图形化 + Python 代码模式）
+> 主控板：**行空板 M10**（不涉及K10）
+
+---
+
+## 一、硬件认知
+
+### 1.1 行空板M10是什么
+
+行空板M10 = 一台微型Linux电脑 + 一颗单片机。
+
+![行空板M10正面](assets/m10-top.png)
+
+![行空板M10板载功能标注](assets/m10-features.png)
+
+```
+┌──────────────────────────────────────┐
+│  CPU: RK3308 四核 64位 1.2GHz       │  ← 运行 Linux (Debian 10)
+│  内存: 512MB DDR3                    │     Python 环境
+│  硬盘: 16GB eMMC                     │
+├──────────────────────────────────────┤
+│  协处理器: GD32VF103 (RISC-V)        │  ← 控制传感器/IO口
+│  通过 pinpong 库与CPU通讯            │
+└──────────────────────────────────────┘
+```
+
+### 1.2 板上有什么
+
+| 位置 | 元件 | 用途 |
+|------|------|------|
+| 正面 | 2.8寸触摸彩屏 (240×320) | 显示文字、图片、按钮 |
+| 正面 | Home键、A键、B键 | 物理按键（A/B可编程） |
+| 正面 | 光线传感器 (P29) | 检测环境光强度 |
+| 正面 | 麦克风 | 录音、语音识别、声音强度 |
+| 背面 | 蓝色L灯 (P25) | 可编程LED |
+| 背面 | 蜂鸣器 | 播放音乐、警报 |
+| 背面 | 六轴传感器 | 加速度+陀螺仪 |
+
+### 1.3 对外接口
+
+| 接口 | 数量 | 说明 |
+|------|------|------|
+| USB-C | 1 | 连接电脑编程、主板供电 |
+| USB-A | 1 | 外接USB设备（摄像头、U盘） |
+| microSD | 1 | 扩展存储 |
+| 3Pin I/O | 4 | 连接传感器/执行器（21~、22~、23~、24） |
+| 4Pin I2C | 2 | I2C设备（OLED屏、语音合成模块等） |
+| 金手指 | 1 | 兼容micro:bit扩展板，引出更多引脚 |
+
+### 1.4 引脚速查总图
+
+![M10正反面引脚高清图](assets/m10-pinout.png)
+
+```
+正面上方 ── 屏幕 ── 光线传感器 ── 麦克风 ──
+左侧边 ── Home A B 按键 ──
+下边接口 ── USB-C ║ USB-A ║ microSD ──
+右侧边 ── I2C(×2) ║ 3Pin I/O(×4: 21 22 23 24) ──
+
+底部金手指（兼容micro:bit）：
+  P0  P1  P2   P3  P4  P5  P6  P7  P8  P9
+  P10 P11 P12  P13 P14 P15 P16 P19 P20
+
+背面 ── L灯(P25) ── 蜂鸣器 ── 六轴传感器 ──
+
+特殊引脚功能：
+  ADC (模拟输入):    P0 P1 P2 P3 P4 P10 P21 P22
+  PWM (模拟输出/舵机): P0 P2 P3 P10 P16 P21 P22 P23
+  I2C (金手指):      P19(SCL) P20(SDA)
+  UART (串口):       P0(RX) P3(TX)
+  SPI0:              P1(SCK) P10(MISO) P2(MOSI)
+  SPI1:              P13(SCK) P14(MISO) P15(MOSI)
+  
+  ⚠ P8与P2共用PWM, P9与P10共用PWM, 二选一
+```
+
+### 1.5 安装尺寸（做外壳必看）
+
+- 板子主体：约 78mm × 52mm
+- 背面有**3个M3螺丝孔**用于固定
+- 设计外壳时需给屏幕下方**排线预留位置**，避免挤压
+- 3D图纸STEP文件：[官方下载](https://img.dfrobot.com.cn/wiki/none/064ac0cf8fd9fcb04a6b4adc3f4f4051.zip)
+
+---
+
+## 二、Mind+ 编程环境
+
+### 2.1 软件安装
+
+1. 下载 Mind+：http://mindplus.cc/
+2. 双击安装（中文），首次运行安装"一键串口驱动"
+3. 版本要求：V1.7.2 RC3.0 及以上
+
+> 📂 **Mind+示例项目**：[行空板M10显示编程](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/数字技术2_Mind+_行空板M10_(K10_探小梦_arduino_microbit_掌控板)项目备忘/01-Mind+行空板M10显示编程.mp)
+
+### 2.2 连接行空板（两种方式）
+
+**方式一：USB线连接（推荐）**
+1. USB-C线连接电脑和行空板
+2. 等待行空板开机（约1分钟，屏幕显示桌面即完成）
+3. Mind+ 右上角 → 点击 `10.1.2.3` 连接
+4. 连接成功后在"文件系统"中看到行空板文件
+
+**方式二：WIFI无线连接**
+1. 电脑和行空板连接同一WiFi
+2. Mind+ → 输入行空板IP地址连接
+3. 查看IP：行空板Home键 → 网络信息（或终端输入 `hostname -I`）
+
+### 2.3 两种编程模式
+
+| 模式 | 操作 | 适合 |
+|------|------|------|
+| **图形化模式** | 拖拽积木组合 → 点击运行 | 快速原型、无代码基础 |
+| **代码模式** | 手写Python → 点击运行 | 复杂逻辑、精确控制 |
+
+**切换方式**：Mind+中间顶部 → 点击"模块/代码"标签切换
+
+> 图形化模式下拖好积木，可以一键切换到代码模式查看对应的 Python 代码（学习神器！）
+
+### 2.4 文件管理
+
+Mind+左侧"文件系统"区域：
+- **项目中的文件**：程序运行时所在的目录，图片/音频/模型文件放这里
+- **拖动文件**：从电脑直接拖文件到"项目中的文件"即可上传到行空板
+
+### 2.5 扩展加载
+
+点击左下角"扩展"按钮 → 加载对应功能库：
+- **官方库** → 行空板M10（必选）
+- **pinpong库** → 传感器相关（DHT11、超声波等）
+- **用户库** → 第三方扩展
+
+---
+
+## 三、Python 编程基础（零基础速成）
+
+### 3.1 变量与数据类型
+
+```python
+# 变量：存储数据的容器
+wendu = 25.5       # 浮点数（小数）
+renshu = 10        # 整数
+mingzi = "张三"    # 字符串（文本）
+kaiguan = True     # 布尔值（真/假）
+
+# 类型转换
+wendu_str = str(wendu)    # 数字 → 文本： "25.5"
+shuzi = int("123")        # 文本 → 整数： 123
+```
+
+### 3.2 条件判断
+
+```python
+guangxian = light.read()   # 读取光线值
+
+if guangxian < 200:        # 如果光线暗
+    led.write_digital(1)   # 开灯
+elif guangxian < 500:      # 否则如果光线一般
+    led.write_digital(0)   # 关灯
+else:                      # 否则
+    print("光线充足")
+```
+
+### 3.3 循环
+
+```python
+# for循环：执行固定次数
+for i in range(5):         # 循环5次 (i=0,1,2,3,4)
+    print(f"第{i+1}次")
+
+# while循环：条件满足时一直执行
+count = 0
+while count < 5:
+    print(count)
+    count = count + 1
+```
+
+### 3.4 函数
+
+```python
+# 定义函数（代码块打包复用）
+def kongtiao_kai():
+    """打开空调（舵机控制）"""
+    servo_11.angle(180)
+    print("空调已开")
+
+def kongtiao_guan():
+    """关闭空调"""
+    servo_11.angle(90)
+    print("空调已关")
+
+# 调用函数
+if wendu > 30:
+    kongtiao_kai()
+```
+
+### 3.5 列表与字典
+
+```python
+# 列表：有序数据集合
+chuanganqi = ["DHT11", "超声波", "光线", "烟雾"]
+
+# 字典：键值对数据
+shebei_zhuangtai = {
+    "wendu": 25.5,
+    "shidu": 60,
+    "kongtiao": "开",
+    "baojing": False
+}
+
+# 读取
+print(shebei_zhuangtai["wendu"])  # 输出: 25.5
+shebei_zhuangtai["kongtiao"] = "关"  # 修改
+```
+
+### 3.6 异常处理（防崩溃）
+
+```python
+try:
+    # 尝试执行可能有问题的代码
+    jieguo = weixian_caozuo()
+except Exception as e:
+    # 出错时执行
+    print(f"出错了: {e}")
+    # 使用备用方案
+```
+
+### 3.7 时间操作
+
+```python
+import time
+
+time.sleep(1)          # 暂停1秒
+time.sleep(0.5)        # 暂停0.5秒
+
+import datetime
+now = datetime.datetime.now()
+print(now.second)      # 当前秒数（0-59）
+
+shijian_chuo = time.strftime("%Y/%m/%d %H:%M:%S")  # 2026/07/15 14:30:00
+```
+
+### 3.8 JSON 数据处理
+
+```python
+import json
+
+# Python字典 → JSON字符串
+data = {"params": "paizhao", "temp": 25.5}
+json_str = json.dumps(data)
+# 结果：'{"params": "paizhao", "temp": 25.5}'
+
+# JSON字符串 → Python字典
+jiexi = json.loads(json_str)
+print(jiexi["params"])  # 输出: paizhao
+```
+
+---
+
+## 四、行空板 Python 库速查（unihiker + pinpong）
+
+### 4.1 库导入总模板
+
+```python
+# ===== 这两行几乎每个程序都要写 =====
+from unihiker import GUI, Audio        # 屏幕、音频
+from pinpong.board import Board, Pin   # 硬件控制
+from pinpong.extension.unihiker import * # 板载元件
+Board().begin()                         # 初始化硬件
+u_gui = GUI()                           # 初始化屏幕
+u_audio = Audio()                       # 初始化音频
+```
+
+### 4.2 屏幕显示（unihiker GUI）
+
+```python
+# 显示文字
+u_gui.draw_text(text="你好世界", x=10, y=10, font_size=20, color="#0000FF")
+# 参数：文字内容、x坐标、y坐标、字号、颜色（#RRGGBB）
+
+# 显示图片
+u_gui.draw_image(image="photo.png", x=20, y=40, w=200, h=150)
+# 图片文件必须已上传到"项目中的文件"
+
+# 清除屏幕
+u_gui.clear()
+
+# 填充矩形区域（用于清屏局部区域或做背景）
+u_gui.fill_rect(x=0, y=0, w=240, h=240, color="#FFFFFF")
+
+# 覆盖文字（技巧：用背景色再画一遍 = 擦除）
+u_gui.draw_text(text="旧文字", x=10, y=10, color="#FFFFFF")  # 白色=擦除
+u_gui.draw_text(text="新文字", x=10, y=10, color="#0000FF")  # 写新文字
+```
+
+### 4.3 按键事件
+
+```python
+# ===== 方式1：回调式（推荐，不会阻塞程序）=====
+# unihiker 库
+u_gui.on_a_click(lambda: print("A键被按下"))
+u_gui.on_b_click(lambda: print("B键被按下"))
+
+# ===== 方式2：查询式 =====
+# pinpong 库
+from pinpong.extension.unihiker import *
+if button_a.is_pressed():
+    print("A键按下")
+```
+
+### 4.4 音频
+
+```python
+u_audio = Audio()
+
+# 录音
+u_audio.record("luyin.wav", 5)   # 录5秒，保存为luyin.wav
+
+# 播放录音
+u_audio.play("luyin.wav")
+
+# 获取环境音量（0-4095）
+yinliang = u_audio.sound_level()
+
+# 系统命令播放（可以后台播放，不阻塞程序）
+import os
+os.system("mplayer yuyin.wav")
+```
+
+### 4.5 板载传感器（pinpong）
+
+```python
+from pinpong.extension.unihiker import *
+
+# 光线传感器
+guangxian = light.read()          # 返回 0-4095，越大越亮
+
+# 加速度传感器
+acc_x = accelerometer.get_x()     # X轴加速度
+acc_y = accelerometer.get_y()     # Y轴加速度
+acc_z = accelerometer.get_z()     # Z轴加速度
+qiangdu = accelerometer.get_strength()  # 合加速度强度
+
+# 蜂鸣器
+buzzer.play(buzzer.DADADADUM, buzzer.OnceInBackground)  # 后台播放
+buzzer.play(buzzer.ENTERTAINER, buzzer.Once)            # 阻塞播放
+# 预置音乐：DADADADUM, ENTERTAINER, PRELUDE, ODE, NYAN, RINGTONE...
+# 播放模式：Once, Forever, OnceInBackground, ForeverInBackground
+
+buzzer.pitch(440, 4)  # 播放440Hz音符，时长4拍
+
+# L灯（P25）
+led = Pin(Pin.P25, Pin.OUT)
+led.write_digital(1)   # 开灯
+led.write_digital(0)   # 关灯
+```
+
+### 4.6 GPIO 引脚操作
+
+```python
+from pinpong.board import Board, Pin
+
+# ===== 数字输出（接LED、继电器等）=====
+led = Pin(Pin.P21, Pin.OUT)     # P21设为输出模式
+led.write_digital(1)            # 输出高电平3.3V（开）
+led.write_digital(0)            # 输出低电平0V（关）
+
+# ===== 数字输入（接按钮、红外等）=====
+button = Pin(Pin.P23, Pin.IN)   # P23设为输入模式
+zhuangtai = button.read_digital()  # 读取：0或1
+
+# ===== 模拟输入 ADC（接旋钮、光线传感器等）=====
+# 支持引脚：P0 P1 P2 P3 P4 P10 P21 P22
+adc_pin = Pin(Pin.P21, Pin.ANALOG)
+moNiZhi = adc_pin.read_analog()    # 返回 0-4095
+
+# ===== PWM 模拟输出（接舵机、LED调光等）=====
+# 支持引脚：P0 P2 P3 P10 P16 P21 P22 P23
+pwm_pin = Pin(Pin.P21, Pin.PWM)
+pwm_pin.write_analog(512)          # 0-1023, 512=50%占空比
+```
+
+---
+
+## 五、多线程（同时做多件事）
+
+> 📂 **参考代码**：[SIoT双向通讯示例](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/数字技术2_Mind+_行空板M10_(K10_探小梦_arduino_microbit_掌控板)项目备忘/27-1Mind+编程行空板M10%20SIOT双向通讯.mp)
+
+**为什么需要多线程？**
+- 行空板MQTT接收消息是一个**无限循环**（`loop_forever`）
+- 传感器数据上报也需要**持续循环**
+- 如果不分线程，一个循环会卡住另一个
+
+```python
+import threading
+
+# 线程1：MQTT消息处理
+def mqtt_thread():
+    client.loop_forever()  # 这个函数永不返回
+
+# 线程2：传感器采集和上传
+def sensor_thread():
+    while True:
+        light_val = light.read()
+        # 上传到MQTT...
+        time.sleep(5)
+
+# 创建并启动线程
+t1 = threading.Thread(target=mqtt_thread)
+t1.start()
+t2 = threading.Thread(target=sensor_thread)
+t2.start()
+
+# 主程序继续运行...
+while True:
+    time.sleep(1)
+```
+
+---
+
+## 六、USB 摄像头
+
+```python
+import cv2
+
+# 拍照
+vd = cv2.VideoCapture()
+vd.open(0)                        # 0=第一个USB摄像头
+while not vd.isOpened():
+    pass                           # 等待摄像头就绪
+ret, frame = vd.read()             # 拍照
+cv2.imwrite("photo.png", frame)    # 保存图片
+vd.release()                       # 释放摄像头
+
+# 在屏幕显示图片
+u_gui.draw_image(image="photo.png", x=20, y=40, w=200)
+```
+
+---
+
+## 七、快速排错
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| Mind+连不上(10.1.2.3) | 行空板未开机完毕 | 等1-2分钟，屏幕显示桌面 |
+| Mind+连不上(10.1.2.3) | USB线只充电不传数据 | 换数据线 |
+| Python运行报错 `IndentationError` | 缩进不对 | Python用4空格或1个Tab缩进，统一 |
+| 图片不显示 | 文件没上传到板子 | 拖到"项目中的文件" |
+| `Board().begin()`报错 | 库没导入 | 检查第1段代码是否完整 |
+| MQTT连不上 | IP或端口错了 | Home键查看网络信息 |
+
+---
+
+## 附：Python 常用颜色代码
+
+```
+#0000FF  蓝色    #FF0000  红色    #00FF00  绿色
+#FF00FF  品红    #FFFF00  黄色    #00FFFF  青色
+#FFFFFF  白色    #000000  黑色    #808080  灰色
+```
+
+---
+
+*参考：行空板M10官方文档 (unihiker.com.cn) + 培训资料*

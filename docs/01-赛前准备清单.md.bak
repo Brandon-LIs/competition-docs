@@ -1,0 +1,107 @@
+# 赛前软件下载清单
+
+> 所有软件需**赛前下载好拷入U盘**，比赛现场无网络！
+
+## 必装软件（Windows电脑）
+
+| 软件                    | 下载地址                                | 大小     | 说明                          |
+| --------------------- | ----------------------------------- | ------ | --------------------------- |
+| **Mind+**             | http://mindplus.cc/                 | ~300MB | 编程主软件，务必装 V1.8.1+           |
+| **SIoT**              | http://mindplus.dfrobot.com.cn/siot | ~10MB  | MQTT服务器，绿色版解压即用             |
+| **App Inventor 2022** | 培训资料里已提供压缩包                         | ~500MB | 手机App开发，解压到非中文目录            |
+| **LaserMaker**        | https://www.laserblock.cn/download  | ~200MB | 激光切割制图                      |
+| **Blender**           | https://www.blender.org/download    | ~400MB | 3D打印建模                      |
+| **Python 3.11**       | https://www.python.org/downloads    | ~25MB  | 桥接AI程序需用，安装时勾选"Add to PATH" |
+
+## 选装软件
+
+| 软件 | 下载地址 | 用途 |
+|------|----------|------|
+| **美图秀秀 4.0.1** | https://xiuxiu.meitu.com | 图片去底/素描化（激光雕刻用） |
+| **WPS Office** | https://www.wps.cn | 写制作说明文档 |
+| **VSCode** | https://code.visualstudio.com | 高级Python编程（可选） |
+| **Ollama** | https://ollama.com | 本地运行DeepSeek等AI模型 |
+
+## 电脑系统要求
+
+- Windows 10/11 64位
+- 至少 8GB 内存（跑本地AI需 8GB+）
+- 至少 20GB 剩余硬盘空间
+- USB-A 口（连接行空板、U盘）
+
+## U盘必存文件清单
+
+### 编程文件
+- [ ] Mind+ 安装包
+- [ ] SIoT_windows_1_2.exe（绿色版）
+- [ ] AppInventor2022ServerEdition 文件夹
+- [ ] Python 3.11 安装包
+- [ ] 培训资料里的 `.mp` 示例程序
+- [ ] 培训资料里的 `.py` / `.aia` 示例文件
+
+### 结构件文件
+- [ ] LaserMaker 安装包
+- [ ] PXQ榫卯卡口.lcpx
+- [ ] 提前生成的盒子 DXF 文件
+- [ ] Blender 安装包
+
+### 文档模板
+- [ ] 制作说明文档模板（word）
+- [ ] 硬件清单模板（excel/word）
+- [ ] 本 Obsidian 知识库完整文件夹
+
+### 程序依赖（Python pip包）
+提前下载好这些包（放到U盘）：
+```bash
+# 在有网的电脑上提前下载
+pip download paho-mqtt requests opencv-python -d ./pip_packages/
+# 把 pip_packages 文件夹拷到U盘
+
+# 比赛现场安装（无需联网）
+pip install --no-index --find-links=./pip_packages/ paho-mqtt requests opencv-python
+```
+
+## 手机端
+
+| 应用 | 来源 | 用途 |
+|------|------|------|
+| **AI伴侣** (MIT AI2 Companion) | App Inventor帮助页扫码下载 | 实时测试App |
+| **28-带设置的SIoT物联网.apk** | 培训资料提供 | 直接遥控行空板 |
+
+## 行空板M10
+
+行空板出厂已预装以下Python库，无需额外安装：
+- `unihiker`（屏幕/音频）
+- `pinpong`（硬件控制）
+- `paho-mqtt`（MQTT通讯）
+- `opencv-python`（摄像头）
+- `numpy`
+- `requests`
+
+如需安装其他库，通过Mind+的"库管理"功能或终端安装。
+
+## 赛前验证清单
+
+**至少提前3天完成以下测试：**
+
+- [ ] 行空板M10 USB连接电脑，Mind+能正常识别和传程序
+- [ ] 行空板M10 打开热点，电脑能连上
+- [ ] SIoT 在电脑上能正常启动，能通过 `http://IP:8080` 访问
+- [ ] MQTT 收发消息测试通过
+- [ ] DHT11 接行空板，能读到温湿度数据
+- [ ] 舵机接扩展板，能正常转动
+- [ ] USB摄像头接行空板，能拍照并在屏幕显示
+- [ ] 超声波传感器能测距
+- [ ] App Inventor 环境能启动，能生成APK
+- [ ] LaserMaker 能打开并能导出切割文件
+- [ ] 写一段简单的MQTT收发Python代码并跑通
+
+---
+
+*最后更新：2026年7月*
+
+---
+
+> 📂 **常用软件素材文件夹(含SIoT/APK/音频等)**：[软件素材插件文件夹](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/数字技术2_Mind+_行空板M10_(K10_探小梦_arduino_microbit_掌控板)项目备忘/%5E软件%5E素材%5E插件/)
+> 📂 **SIoT安装包(本地)**：[SIoT1.2_win.zip](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/数字技术2_Mind+_行空板M10_(K10_探小梦_arduino_microbit_掌控板)项目备忘/%5E软件%5E素材%5E插件/常用软件/SIoT1.2_win.zip)
+> 📂 **常用软件下载链接备忘**：[常用软件百度网盘链接.txt](file:///Users/liboning/Desktop/科创比赛相关/学校比赛/2026诸暨备赛/2025年9月-2026年7月(国%20省%20市)创意智造培训/数字技术2_Mind+_行空板M10_(K10_探小梦_arduino_microbit_掌控板)项目备忘/%5E软件%5E素材%5E插件/常用软件/创意智造^智能博物^优创未来(常用软件)百度网盘下载链接.txt)
