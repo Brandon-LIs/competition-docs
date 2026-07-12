@@ -1,0 +1,97 @@
+#include <UNO_Obloq.h>
+#include <DFRobot_DHT.h>
+#include <DFRobot_Servo.h>
+#include <SoftwareSerial.h>
+#include <DFRobot_SSD1306_I2C.h>
+#include <DFRobot_SpeechSynthesis_M.h>
+
+// 动态变量
+volatile float mind_n_CO;
+// 静态常量
+const String topics[5] = {"aaa/b","aaa/c","aaa/j","",""};
+const chCode chBuf[] = {
+	{0x2103,0xe28483,0xA1E6,{0x60,0x00,0x91,0xf4,0x96,0x0c,0x6c,0x04,0x08,0x04,0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00,0x08,0x00,0x0c,0x04,0x06,0x08,0x01,0xf0,0x00,0x00}}
+};
+// 创建对象
+DFRobot_SSD1306_I2C         oled12864;
+UNO_Obloq                   olq;
+SoftwareSerial              softSerial(2, 3);
+DFRobot_SpeechSynthesis_I2C sstts;
+DFRobot_DHT                 dht11_4;
+Servo                       servo_11;
+
+
+// 主程序开始
+void setup() {
+	dht11_4.begin(4, DHT11);
+	oled12864.setChCode(chBuf);
+	servo_11.attach(11);
+	oled12864.begin(0x3c);
+	oled12864.setCursorLine(1);
+	oled12864.printLine("connected___10%");
+	softSerial.begin(9600);
+  olq.startConnect(&softSerial, "douzi", "88898889", "siot", "dfrobot", topics, "192.168.173.167", 1883);
+	oled12864.setCursorLine(1);
+	oled12864.printLine("connected___60%");
+	sstts.begin(sstts.eV2);
+	oled12864.setCursorLine(1);
+	oled12864.printLine("connected___80%");
+	sstts.setVolume(8);
+	sstts.setSpeed(5);
+	sstts.setSoundType(sstts.eFemale2);
+	sstts.setTone(5);
+	oled12864.setCursorLine(1);
+	oled12864.printLine("connected___100%");
+	sstts.setEnglishPron(sstts.eAlphabet);
+	oled12864.fillScreen(0);
+	mind_n_CO = 1;
+}
+void loop() {
+	if ((olq.available(olq.topic_2))) {
+		sstts.speak(olq.getMessage(olq.topic_2));
+		delay(1000);
+	}
+	oled12864.setCursorLine(3);
+	oled12864.printLine((String((String((String(dht11_4.getTemperature()).toInt())) + String("℃"))) + String((String((String(dht11_4.getHumidity()).toInt())) + String("%")))));
+	oled12864.setCursorLine(4);
+	oled12864.printLine(analogRead(A0));
+	if ((dht11_4.getHumidity()<70)) {
+		servo_11.angle(abs(90));
+	}
+	else {
+		oled12864.setCursorLine(2);
+		oled12864.printLine(" too hot");
+		servo_11.angle(abs(180));
+		olq.publish(olq.topic_0, "{\"params\":\"toohot\"}");
+	}
+	if (digitalRead(8)) {
+		oled12864.setCursorLine(2);
+		oled12864.printLine("paizhao");
+		olq.publish(olq.topic_0, "{\"params\":\"paizhao\"}");
+	}
+	if (digitalRead(5)) {
+		oled12864.setCursorLine(2);
+		oled12864.printLine("luying");
+		olq.publish(olq.topic_0, "{\"params\":\"luying\"}");
+		delay(3000);
+	}
+	if ((analogRead(A0)>20)) {
+		oled12864.setCursorLine(1);
+		oled12864.printLine("zhengchang");
+		oled12864.setCursorLine(2);
+		oled12864.printLine("                        ");
+		mind_n_CO = 1;
+	}
+	else {
+		oled12864.setCursorLine(2);
+		oled12864.printLine("huozai");
+		oled12864.setCursorLine(1);
+		oled12864.printLine("                        ");
+		sstts.speak("火灾警告");
+		delay(1000);
+		mind_n_CO = 0;
+		olq.publish(olq.topic_0, "{\"params\":\"huozai\"}");
+		delay(3000);
+	}
+	delay(500);
+}
